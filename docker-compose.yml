@@ -1,0 +1,43 @@
+version: '3'
+services:
+  # Docker-in-Docker service
+  dind:
+    image: docker:20.10.7-dind
+    privileged: true   # Required to enable Docker-In-Docker
+    environment:
+      - DOCKER_TLS_CERTDIR=/certs
+    volumes:
+      - dind-storage:/var/lib/docker  # Volume to persist Docker data
+      - ./jenkins-docker-certs:/certs/client  # Directory to store Docker certificates
+    ports:
+      - "2376:2376"  # Docker daemon port (for secure access)
+    networks:
+      - jenkins
+
+  # Jenkins service
+  jenkins:
+    image: jenkins/jenkins:lts
+    user: root   # Ensure Jenkins runs as root to execute Docker commands
+    environment:
+      - DOCKER_HOST=tcp://dind:2376
+      - DOCKER_CERT_PATH=/certs/client
+      - DOCKER_TLS_VERIFY=1
+    volumes:
+      - jenkins-data:/var/jenkins_home  # Persistent volume for Jenkins data
+      - ./jenkins-docker-certs:/certs/client:ro  # Mount Docker certificates for secure connection
+      - /var/run/docker.sock:/var/run/docker.sock  # Enable Jenkins to communicate with Docker
+    ports:
+      - "8080:8080"  # Jenkins web interface port
+      - "50000:50000"  # Jenkins agent port
+    depends_on:
+      - dind  # Ensure DinD starts before Jenkins
+    networks:
+      - jenkins
+
+volumes:
+  jenkins-data:  # Volume for persisting Jenkins data
+  dind-storage:  # Volume for Docker storage in DinD
+
+networks:
+  jenkins:
+    driver: bridge  # Create a bridge network for Jenkins and DinD to communicate
